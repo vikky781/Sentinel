@@ -55,3 +55,45 @@ def parse_python_file(path: Path) -> ast.AST:
             line_number=exc.lineno,
             detail=exc.msg,
         ) from exc
+
+
+class _FunctionCollector(ast.NodeVisitor):
+    """AST visitor that collects function and method definitions."""
+
+    def __init__(self) -> None:
+        self.functions: list[dict[str, str | int]] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Record a function definition and continue traversal."""
+        self.functions.append({
+            "name": node.name,
+            "lineno": node.lineno,
+            "end_lineno": node.end_lineno if node.end_lineno is not None else node.lineno,
+        })
+        self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Record an async function definition and continue traversal."""
+        self.functions.append({
+            "name": node.name,
+            "lineno": node.lineno,
+            "end_lineno": node.end_lineno if node.end_lineno is not None else node.lineno,
+        })
+        self.generic_visit(node)
+
+
+def extract_functions(tree: ast.AST) -> list[dict[str, str | int]]:
+    """Extract all function definitions from an AST.
+
+    Args:
+        tree: A parsed abstract syntax tree.
+
+    Returns:
+        A list of dictionaries, each containing:
+            - name: The function name.
+            - lineno: The starting line number.
+            - end_lineno: The ending line number.
+    """
+    collector = _FunctionCollector()
+    collector.visit(tree)
+    return collector.functions
