@@ -97,3 +97,38 @@ def extract_functions(tree: ast.AST) -> list[dict[str, str | int]]:
     collector = _FunctionCollector()
     collector.visit(tree)
     return collector.functions
+
+
+class _ImportCollector(ast.NodeVisitor):
+    """AST visitor that collects imported module names."""
+
+    def __init__(self) -> None:
+        self.modules: list[str] = []
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Record module names from an import statement."""
+        for alias in node.names:
+            self.modules.append(alias.name)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Record the module name from a from-import statement."""
+        if node.module is not None:
+            self.modules.append(node.module)
+        self.generic_visit(node)
+
+
+def extract_imports(tree: ast.AST) -> list[str]:
+    """Extract all imported module names from an AST.
+
+    Handles both ``import x`` and ``from x import y`` forms.
+
+    Args:
+        tree: A parsed abstract syntax tree.
+
+    Returns:
+        A flat list of module name strings in the order they appear.
+    """
+    collector = _ImportCollector()
+    collector.visit(tree)
+    return collector.modules
