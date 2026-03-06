@@ -132,3 +132,34 @@ def extract_imports(tree: ast.AST) -> list[str]:
     collector = _ImportCollector()
     collector.visit(tree)
     return collector.modules
+
+
+class _ClassCollector(ast.NodeVisitor):
+    """AST visitor that collects class definitions."""
+
+    def __init__(self) -> None:
+        self.classes: list[dict[str, str | int]] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """Record a class definition and continue traversal."""
+        self.classes.append({
+            "name": node.name,
+            "lineno": node.lineno,
+        })
+        self.generic_visit(node)
+
+
+def extract_classes(tree: ast.AST) -> list[dict[str, str | int]]:
+    """Extract all class definitions from an AST.
+
+    Args:
+        tree: A parsed abstract syntax tree.
+
+    Returns:
+        A list of dictionaries, each containing:
+            - name: The class name.
+            - lineno: The starting line number.
+    """
+    collector = _ClassCollector()
+    collector.visit(tree)
+    return collector.classes
