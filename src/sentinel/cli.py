@@ -1,6 +1,7 @@
 """Command-line interface orchestration for Sentinel."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -25,6 +26,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "path",
         type=str,
         help="File or directory path to analyze.",
+    )
+    analyze_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the full analysis report as JSON.",
     )
 
     return parser
@@ -100,7 +106,10 @@ def execute(args: argparse.Namespace) -> int:
         except OSError as exc:
             print(f"sentinel: error: {exc}", file=sys.stderr)
             return 1
-        _print_summary(report)
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            _print_summary(report)
         return 0
 
     return 1
