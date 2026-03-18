@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from sentinel.analysis.engine import analyze_file
 from sentinel.parser.ast_extractor import SentinelSyntaxError
+from sentinel.reporting.markdown import generate_markdown_report
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -31,6 +32,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the full analysis report as JSON.",
+    )
+    analyze_parser.add_argument(
+        "--report",
+        type=str,
+        help="Write the full analysis report to a Markdown file.",
     )
 
     return parser
@@ -106,6 +112,16 @@ def execute(args: argparse.Namespace) -> int:
         except OSError as exc:
             print(f"sentinel: error: {exc}", file=sys.stderr)
             return 1
+
+        if args.report:
+            report_path = Path(args.report)
+            try:
+                markdown_output = generate_markdown_report(report)
+                report_path.write_text(markdown_output, encoding="utf-8")
+            except OSError as exc:
+                print(f"sentinel: error: {exc}", file=sys.stderr)
+                return 1
+
         if args.json:
             print(json.dumps(report, indent=2))
         else:
