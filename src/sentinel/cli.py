@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
+from sentinel.ai.reviewer import generate_review
 from sentinel.analysis.engine import analyze_file
 from sentinel.parser.ast_extractor import SentinelSyntaxError
 from sentinel.reporting.markdown import generate_markdown_report
@@ -37,6 +38,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--report",
         type=str,
         help="Write the full analysis report to a Markdown file.",
+    )
+    analyze_parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="Generate an AI-assisted review.",
     )
 
     return parser
@@ -126,6 +132,17 @@ def execute(args: argparse.Namespace) -> int:
             print(json.dumps(report, indent=2))
         else:
             _print_summary(report)
+
+        if args.ai:
+            try:
+                review = generate_review(report, use_ai=True)
+            except (TypeError, ValueError) as exc:
+                print(f"sentinel: error: {exc}", file=sys.stderr)
+                return 1
+            print()
+            print("Review")
+            print("------")
+            print(review)
         return 0
 
     return 1
