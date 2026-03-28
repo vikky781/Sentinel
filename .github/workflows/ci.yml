@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
@@ -9,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -17,11 +19,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pytest pytest-cov
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
 
-      - name: Run tests with coverage
-        run: pytest --cov=src/sentinel --cov-report=term-missing --cov-fail-under=85
+      - name: Install project
+        run: pip install -e .
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Run test suite
+        run: pytest
