@@ -19,6 +19,12 @@ from sentinel.scoring.maintainability import calculate_score
 
 logger = logging.getLogger(__name__)
 
+ENGINE_HANDLED_EXCEPTIONS: tuple[type[Exception], ...] = (
+    FileNotFoundError,
+    ValueError,
+    OSError,
+)
+
 
 def analyze_file(path: Path) -> dict[str, Any]:
     """Parse a Python file, compute all metrics, and return an aggregated report.
@@ -57,46 +63,53 @@ def analyze_file(path: Path) -> dict[str, Any]:
         OSError: If the file cannot be read.
     """
     logger.info("Analysis pipeline started", extra={"event": "analysis.engine.start", "path": str(path)})
-    tree = parse_python_file(path)
+    try:
+        tree = parse_python_file(path)
 
-    functions = extract_functions(tree)
-    imports = extract_imports(tree)
-    classes = extract_classes(tree)
+        functions = extract_functions(tree)
+        imports = extract_imports(tree)
+        classes = extract_classes(tree)
 
-    complexity = compute_cyclomatic_complexity(tree)
-    nesting = compute_nesting_depth(tree)
-    recursion = detect_recursion(tree)
-    call_graph = build_call_graph(tree)
-    globals_list = detect_global_variables(tree)
+        complexity = compute_cyclomatic_complexity(tree)
+        nesting = compute_nesting_depth(tree)
+        recursion = detect_recursion(tree)
+        call_graph = build_call_graph(tree)
+        globals_list = detect_global_variables(tree)
 
-    score_result = calculate_score(
-        complexities=complexity,
-        nesting=nesting,
-        globals_count=len(globals_list),
-    )
+        score_result = calculate_score(
+            complexities=complexity,
+            nesting=nesting,
+            globals_count=len(globals_list),
+        )
 
-    logger.info(
-        "Analysis pipeline completed",
-        extra={
-            "event": "analysis.engine.completed",
-            "path": str(path),
-            "functions": len(functions),
-            "classes": len(classes),
-            "imports": len(imports),
-            "globals": len(globals_list),
-        },
-    )
+        logger.info(
+            "Analysis pipeline completed",
+            extra={
+                "event": "analysis.engine.completed",
+                "path": str(path),
+                "functions": len(functions),
+                "classes": len(classes),
+                "imports": len(imports),
+                "globals": len(globals_list),
+            },
+        )
 
-    return {
-        "file": str(path.resolve()),
-        "functions": functions,
-        "imports": imports,
-        "classes": classes,
-        "complexity": complexity,
-        "nesting": nesting,
-        "recursion": recursion,
-        "call_graph": call_graph,
-        "globals": globals_list,
-        "score": score_result["score"],
-        "risk": score_result["risk"],
-    }
+        return {
+            "file": str(path.resolve()),
+            "functions": functions,
+            "imports": imports,
+            "classes": classes,
+            "complexity": complexity,
+            "nesting": nesting,
+            "recursion": recursion,
+            "call_graph": call_graph,
+            "globals": globals_list,
+            "score": score_result["score"],
+            "risk": score_result["risk"],
+        }
+    except ENGINE_HANDLED_EXCEPTIONS:
+        logger.exception(
+            "Analysis pipeline failed",
+            extra={"event": "analysis.engine.error", "path": str(path)},
+        )
+        raise

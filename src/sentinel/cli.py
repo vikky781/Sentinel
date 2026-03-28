@@ -5,7 +5,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from sentinel.ai.reviewer import generate_review
 from sentinel.analysis.engine import analyze_file
@@ -13,6 +13,34 @@ from sentinel.parser.ast_extractor import SentinelSyntaxError
 from sentinel.reporting.markdown import generate_markdown_report
 
 logger = logging.getLogger(__name__)
+
+ANALYZE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ValueError,
+    SentinelSyntaxError,
+    OSError,
+)
+
+REVIEW_EXCEPTIONS: tuple[type[Exception], ...] = (
+    TypeError,
+    ValueError,
+)
+
+
+def _handle_cli_error(event: str, path: Path, message: str, exc: Exception) -> int:
+    """Log and print a structured CLI error.
+
+    Args:
+        event: Event name used in structured logging.
+        path: Target path associated with the error.
+        message: Human-readable log message.
+        exc: Captured exception.
+
+    Returns:
+        Process exit code ``1``.
+    """
+    logger.exception(message, extra={"event": event, "path": str(path)})
+    print(f"sentinel: error: {exc}", file=sys.stderr)
+    return 1
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -118,19 +146,14 @@ def execute(args: argparse.Namespace) -> int:
             print(f"sentinel: error: path does not exist: {args.path}", file=sys.stderr)
             return 1
         try:
-            report: dict[str, Any] = cast(dict[str, Any], analyze_file(target))
-        except ValueError as exc:
-            logger.exception("Analysis value error", extra={"event": "cli.analyze.value_error", "path": str(target)})
-            print(f"sentinel: error: {exc}", file=sys.stderr)
-            return 1
-        except SentinelSyntaxError as exc:
-            logger.exception("Analysis syntax error", extra={"event": "cli.analyze.syntax_error", "path": str(target)})
-            print(f"sentinel: error: {exc}", file=sys.stderr)
-            return 1
-        except OSError as exc:
-            logger.exception("Analysis OS error", extra={"event": "cli.analyze.os_error", "path": str(target)})
-            print(f"sentinel: error: {exc}", file=sys.stderr)
-            return 1
+            report = analyze_file(target)
+        except ANALYZE_EXCEPTIONS as exc:
+            return _handle_cli_error(
+                event="cli.analyze.error",
+                path=target,
+                message="Analysis command failed",
+                exc=exc,
+            )
 
         if args.report:
             report_path = Path(args.report)
@@ -142,12 +165,12 @@ def execute(args: argparse.Namespace) -> int:
                     extra={"event": "cli.report.written", "path": str(report_path)},
                 )
             except OSError as exc:
-                logger.exception(
-                    "Failed to write markdown report",
-                    extra={"event": "cli.report.write_error", "path": str(report_path)},
+                return _handle_cli_error(
+                    event="cli.report.write_error",
+                    path=report_path,
+                    message="Failed to write markdown report",
+                    exc=exc,
                 )
-                print(f"sentinel: error: {exc}", file=sys.stderr)
-                return 1
 
         if args.json:
             print(json.dumps(report, indent=2))
@@ -157,10 +180,13 @@ def execute(args: argparse.Namespace) -> int:
         if args.ai:
             try:
                 review = generate_review(report, use_ai=True)
-            except (TypeError, ValueError) as exc:
-                logger.exception("Review generation failed", extra={"event": "cli.review.error", "path": str(target)})
-                print(f"sentinel: error: {exc}", file=sys.stderr)
-                return 1
+            except REVIEW_EXCEPTIONS as exc:
+                return _handle_cli_error(
+                    event="cli.review.error",
+                    path=target,
+                    message="Review generation failed",
+                    exc=exc,
+                )
             print()
             print("Review")
             print("------")
