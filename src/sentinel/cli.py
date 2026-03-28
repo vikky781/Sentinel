@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -11,9 +12,12 @@ from sentinel.analysis.engine import analyze_file
 from sentinel.parser.ast_extractor import SentinelSyntaxError
 from sentinel.reporting.markdown import generate_markdown_report
 
+logger = logging.getLogger(__name__)
+
 
 def build_argument_parser() -> argparse.ArgumentParser:
     """Construct and return the Sentinel CLI argument parser."""
+    logger.debug("Building CLI argument parser", extra={"event": "cli.parser.build"})
     parser = argparse.ArgumentParser(
         prog="sentinel",
         description="Sentinel: a production-grade static analysis CLI tool.",
@@ -98,24 +102,33 @@ def execute(args: argparse.Namespace) -> int:
     Returns:
         Integer exit code. 0 for success, 1 for failure.
     """
+    logger.debug(
+        "Executing CLI command",
+        extra={"event": "cli.execute", "command": getattr(args, "command", None)},
+    )
     if args.command is None:
         build_argument_parser().print_help()
         return 1
 
     if args.command == "analyze":
         target = Path(args.path)
+        logger.info("Starting analysis command", extra={"event": "cli.analyze.start", "path": str(target)})
         if not target.exists():
+            logger.error("Analysis target does not exist", extra={"event": "cli.analyze.invalid_path", "path": str(target)})
             print(f"sentinel: error: path does not exist: {args.path}", file=sys.stderr)
             return 1
         try:
             report: dict[str, Any] = cast(dict[str, Any], analyze_file(target))
         except ValueError as exc:
+            logger.exception("Analysis value error", extra={"event": "cli.analyze.value_error", "path": str(target)})
             print(f"sentinel: error: {exc}", file=sys.stderr)
             return 1
         except SentinelSyntaxError as exc:
+            logger.exception("Analysis syntax error", extra={"event": "cli.analyze.syntax_error", "path": str(target)})
             print(f"sentinel: error: {exc}", file=sys.stderr)
             return 1
         except OSError as exc:
+            logger.exception("Analysis OS error", extra={"event": "cli.analyze.os_error", "path": str(target)})
             print(f"sentinel: error: {exc}", file=sys.stderr)
             return 1
 
@@ -124,7 +137,15 @@ def execute(args: argparse.Namespace) -> int:
             try:
                 markdown_output = generate_markdown_report(report)
                 report_path.write_text(markdown_output, encoding="utf-8")
+                logger.info(
+                    "Markdown report written",
+                    extra={"event": "cli.report.written", "path": str(report_path)},
+                )
             except OSError as exc:
+                logger.exception(
+                    "Failed to write markdown report",
+                    extra={"event": "cli.report.write_error", "path": str(report_path)},
+                )
                 print(f"sentinel: error: {exc}", file=sys.stderr)
                 return 1
 
@@ -137,12 +158,15 @@ def execute(args: argparse.Namespace) -> int:
             try:
                 review = generate_review(report, use_ai=True)
             except (TypeError, ValueError) as exc:
+                logger.exception("Review generation failed", extra={"event": "cli.review.error", "path": str(target)})
                 print(f"sentinel: error: {exc}", file=sys.stderr)
                 return 1
             print()
             print("Review")
             print("------")
             print(review)
+            logger.info("Review generated", extra={"event": "cli.review.generated", "path": str(target)})
+        logger.info("Analysis command completed", extra={"event": "cli.analyze.completed", "path": str(target)})
         return 0
 
     return 1
@@ -150,6 +174,7 @@ def execute(args: argparse.Namespace) -> int:
 
 def main() -> None:
     """Entry point for the Sentinel CLI."""
+    logger.debug("CLI entrypoint invoked", extra={"event": "cli.main"})
     parser = build_argument_parser()
     args = parser.parse_args()
     raise SystemExit(execute(args))

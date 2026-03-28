@@ -1,6 +1,9 @@
 """Markdown report generation for Sentinel analysis results."""
 
+import logging
 from typing import Any, cast
+
+logger = logging.getLogger(__name__)
 
 
 def _as_list_of_dicts(value: Any) -> list[dict[str, Any]]:
@@ -41,6 +44,7 @@ def generate_markdown_report(analysis: dict[str, Any]) -> str:
     Returns:
         A Markdown-formatted report string.
     """
+    logger.debug("Generating markdown report", extra={"event": "reporting.markdown.start"})
     file_path = str(analysis.get("file", ""))
     score = analysis.get("score", "")
     risk = str(analysis.get("risk", ""))
@@ -142,4 +146,9 @@ def generate_markdown_report(analysis: dict[str, Any]) -> str:
     else:
         lines.append("- None")
 
-    return "\n".join(lines)
+    report_output = "\n".join(lines)
+    logger.info(
+        "Markdown report generated",
+        extra={"event": "reporting.markdown.completed", "line_count": len(lines)},
+    )
+    return report_output

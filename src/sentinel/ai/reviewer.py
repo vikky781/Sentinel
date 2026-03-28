@@ -1,9 +1,12 @@
 """AI-assisted review generation for Sentinel analysis reports."""
 
 import json
+import logging
 import os
 from typing import Any, cast
 from urllib import error, request
+
+logger = logging.getLogger(__name__)
 
 
 class ReviewerConfigurationError(RuntimeError):
@@ -27,18 +30,23 @@ def _validate_structured_json(analysis: Any) -> dict[str, Any]:
         TypeError: If the payload is not a dictionary.
         ValueError: If the payload cannot be serialized as a JSON object.
     """
+    logger.debug("Validating analysis payload", extra={"event": "ai.reviewer.validate.start"})
     if not isinstance(analysis, dict):
+        logger.error("Analysis payload is not a dictionary", extra={"event": "ai.reviewer.validate.type_error"})
         raise TypeError("analysis must be a dictionary representing a JSON object")
 
     try:
         encoded = json.dumps(analysis, ensure_ascii=False, sort_keys=True)
         decoded = json.loads(encoded)
     except (TypeError, ValueError) as exc:
+        logger.exception("Analysis payload is not JSON-serializable", extra={"event": "ai.reviewer.validate.serialization_error"})
         raise ValueError("analysis must be JSON-serializable") from exc
 
     if not isinstance(decoded, dict):
+        logger.error("Analysis payload does not decode to JSON object", extra={"event": "ai.reviewer.validate.object_error"})
         raise ValueError("analysis must encode to a JSON object")
 
+    logger.debug("Analysis payload validated", extra={"event": "ai.reviewer.validate.completed"})
     return cast(dict[str, Any], decoded)
 
 
@@ -51,6 +59,7 @@ def _generate_deterministic_summary(analysis: dict[str, Any]) -> str:
     Returns:
         Deterministic plain-text summary.
     """
+    logger.debug("Generating deterministic review", extra={"event": "ai.reviewer.deterministic.start"})
     file_path = str(analysis.get("file", ""))
     score = analysis.get("score", "")
     risk = str(analysis.get("risk", ""))
@@ -93,7 +102,9 @@ def _generate_deterministic_summary(analysis: dict[str, Any]) -> str:
             for name, value in ranked[:3]:
                 lines.append(f"- {name}: {value}")
 
-    return "\n".join(lines)
+    summary = "\n".join(lines)
+    logger.info("Deterministic review generated", extra={"event": "ai.reviewer.deterministic.completed"})
+    return summary
 
 
 def _generate_ai_summary(analysis: dict[str, Any]) -> str:
@@ -114,11 +125,13 @@ def _generate_ai_summary(analysis: dict[str, Any]) -> str:
         ReviewerConfigurationError: If required configuration is missing.
         ReviewerAIError: If the request fails or response is malformed.
     """
+    logger.debug("Generating AI review", extra={"event": "ai.reviewer.ai.start"})
     base_url = os.getenv("SENTINEL_AI_BASE_URL", "").strip()
     api_key = os.getenv("SENTINEL_AI_API_KEY", "").strip()
     model = os.getenv("SENTINEL_AI_MODEL", "").strip()
 
     if not base_url or not api_key or not model:
+        logger.error("AI configuration missing", extra={"event": "ai.reviewer.ai.config_missing"})
         raise ReviewerConfigurationError(
             "AI configuration is incomplete. Set SENTINEL_AI_BASE_URL, "
             "SENTINEL_AI_API_KEY, and SENTINEL_AI_MODEL.",
@@ -157,6 +170,7 @@ def _generate_ai_summary(analysis: dict[str, Any]) -> str:
         with request.urlopen(req, timeout=20) as response:
             response_payload = json.loads(response.read().decode("utf-8"))
     except (error.URLError, TimeoutError, OSError, ValueError) as exc:
+        logger.exception("AI request failed", extra={"event": "ai.reviewer.ai.request_error"})
         raise ReviewerAIError(f"AI request failed: {exc}") from exc
 
     try:
@@ -164,11 +178,14 @@ def _generate_ai_summary(analysis: dict[str, Any]) -> str:
         message = choices[0]["message"]
         content = message["content"]
     except (KeyError, IndexError, TypeError) as exc:
+        logger.exception("AI response malformed", extra={"event": "ai.reviewer.ai.response_malformed"})
         raise ReviewerAIError("AI response is malformed") from exc
 
     if not isinstance(content, str) or not content.strip():
+        logger.error("AI response content empty", extra={"event": "ai.reviewer.ai.response_empty"})
         raise ReviewerAIError("AI response content is empty")
 
+    logger.info("AI review generated", extra={"event": "ai.reviewer.ai.completed"})
     return content.strip()
 
 
@@ -187,6 +204,7 @@ def generate_review(analysis: dict[str, Any], use_ai: bool) -> str:
         TypeError: If ``analysis`` is not a dictionary.
         ValueError: If ``analysis`` is not JSON-serializable.
     """
+    logger.debug("Generating review", extra={"event": "ai.reviewer.generate", "use_ai": use_ai})
     validated = _validate_structured_json(analysis)
 
     if not use_ai:
@@ -195,4 +213,5 @@ def generate_review(analysis: dict[str, Any], use_ai: bool) -> str:
     try:
         return _generate_ai_summary(validated)
     except (ReviewerConfigurationError, ReviewerAIError):
+        logger.warning("AI unavailable; falling back to deterministic summary", extra={"event": "ai.reviewer.fallback"})
         return _generate_deterministic_summary(validated)

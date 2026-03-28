@@ -1,6 +1,9 @@
 """Direct recursion detection for Python ASTs."""
 
 import ast
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class _RecursionDetector(ast.NodeVisitor):
@@ -52,6 +55,11 @@ def detect_recursion(tree: ast.AST) -> dict[str, bool]:
         A mapping of function name to a boolean indicating whether
         the function is directly recursive.
     """
+    logger.debug("Detecting direct recursion", extra={"event": "analysis.recursion.start"})
     detector = _RecursionDetector()
     detector.visit(tree)
+    logger.info(
+        "Recursion detection completed",
+        extra={"event": "analysis.recursion.completed", "functions": len(detector.results)},
+    )
     return detector.results

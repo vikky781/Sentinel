@@ -1,6 +1,9 @@
 """Maximum nesting depth computation for Python ASTs."""
 
 import ast
+import logging
+
+logger = logging.getLogger(__name__)
 
 _NESTING_NODE_TYPES: tuple[type, ...] = (
     ast.If,
@@ -70,6 +73,11 @@ def compute_nesting_depth(tree: ast.AST) -> dict[str, int]:
     Returns:
         A mapping of function name to its maximum nesting depth.
     """
+    logger.debug("Computing nesting depth", extra={"event": "analysis.nesting.start"})
     visitor = _NestingVisitor()
     visitor.visit(tree)
+    logger.info(
+        "Nesting depth computed",
+        extra={"event": "analysis.nesting.completed", "functions": len(visitor.results)},
+    )
     return visitor.results

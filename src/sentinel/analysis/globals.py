@@ -1,6 +1,9 @@
 """Global variable detection for Python ASTs."""
 
 import ast
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def detect_global_variables(tree: ast.AST) -> list[str]:
@@ -15,7 +18,9 @@ def detect_global_variables(tree: ast.AST) -> list[str]:
     Returns:
         A list of variable names assigned at module scope, in source order.
     """
+    logger.debug("Detecting global variables", extra={"event": "analysis.globals.start"})
     if not isinstance(tree, ast.Module):
+        logger.debug("AST is not a module; returning empty globals list", extra={"event": "analysis.globals.non_module"})
         return []
 
     names: list[str] = []
@@ -30,4 +35,8 @@ def detect_global_variables(tree: ast.AST) -> list[str]:
         elif isinstance(node, ast.AugAssign):
             if isinstance(node.target, ast.Name):
                 names.append(node.target.id)
+    logger.info(
+        "Global variable detection completed",
+        extra={"event": "analysis.globals.completed", "count": len(names)},
+    )
     return names

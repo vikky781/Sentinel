@@ -1,6 +1,9 @@
 """Cyclomatic complexity computation for Python ASTs."""
 
 import ast
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class _ComplexityVisitor(ast.NodeVisitor):
@@ -78,6 +81,11 @@ def compute_cyclomatic_complexity(tree: ast.AST) -> dict[str, int]:
     Returns:
         A mapping of function name to its cyclomatic complexity score.
     """
+    logger.debug("Computing cyclomatic complexity", extra={"event": "analysis.complexity.start"})
     visitor = _ComplexityVisitor()
     visitor.visit(tree)
+    logger.info(
+        "Cyclomatic complexity computed",
+        extra={"event": "analysis.complexity.completed", "functions": len(visitor.results)},
+    )
     return visitor.results

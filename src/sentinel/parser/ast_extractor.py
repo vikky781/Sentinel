@@ -1,7 +1,10 @@
 """AST extraction utilities for parsing Python source files."""
 
 import ast
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class SentinelSyntaxError(Exception):
@@ -39,17 +42,29 @@ def parse_python_file(path: Path) -> ast.AST:
         SentinelSyntaxError: If the file contains invalid Python syntax.
         OSError: If the file cannot be read.
     """
+    logger.debug("Parsing Python file", extra={"event": "parser.parse.start", "path": str(path)})
     if not path.exists():
+        logger.error("File does not exist", extra={"event": "parser.parse.file_missing", "path": str(path)})
         raise FileNotFoundError(f"File does not exist: {path}")
 
     if path.suffix != ".py":
+        logger.error(
+            "Invalid file extension",
+            extra={"event": "parser.parse.invalid_extension", "path": str(path), "suffix": path.suffix},
+        )
         raise ValueError(f"Expected a .py file, got: {path.suffix!r} ({path})")
 
     source: str = path.read_text(encoding="utf-8")
 
     try:
-        return ast.parse(source, filename=str(path))
+        parsed = ast.parse(source, filename=str(path))
+        logger.info("Parsing completed", extra={"event": "parser.parse.completed", "path": str(path)})
+        return parsed
     except SyntaxError as exc:
+        logger.exception(
+            "Syntax error while parsing",
+            extra={"event": "parser.parse.syntax_error", "path": str(path), "line": exc.lineno},
+        )
         raise SentinelSyntaxError(
             file_path=path,
             line_number=exc.lineno,
@@ -94,8 +109,13 @@ def extract_functions(tree: ast.AST) -> list[dict[str, str | int]]:
             - lineno: The starting line number.
             - end_lineno: The ending line number.
     """
+    logger.debug("Extracting functions", extra={"event": "parser.extract_functions.start"})
     collector = _FunctionCollector()
     collector.visit(tree)
+    logger.info(
+        "Function extraction completed",
+        extra={"event": "parser.extract_functions.completed", "count": len(collector.functions)},
+    )
     return collector.functions
 
 
@@ -129,8 +149,13 @@ def extract_imports(tree: ast.AST) -> list[str]:
     Returns:
         A flat list of module name strings in the order they appear.
     """
+    logger.debug("Extracting imports", extra={"event": "parser.extract_imports.start"})
     collector = _ImportCollector()
     collector.visit(tree)
+    logger.info(
+        "Import extraction completed",
+        extra={"event": "parser.extract_imports.completed", "count": len(collector.modules)},
+    )
     return collector.modules
 
 
@@ -160,6 +185,11 @@ def extract_classes(tree: ast.AST) -> list[dict[str, str | int]]:
             - name: The class name.
             - lineno: The starting line number.
     """
+    logger.debug("Extracting classes", extra={"event": "parser.extract_classes.start"})
     collector = _ClassCollector()
     collector.visit(tree)
+    logger.info(
+        "Class extraction completed",
+        extra={"event": "parser.extract_classes.completed", "count": len(collector.classes)},
+    )
     return collector.classes

@@ -1,6 +1,9 @@
 """Call graph construction for Python ASTs."""
 
 import ast
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class _CallGraphBuilder(ast.NodeVisitor):
@@ -72,6 +75,11 @@ def build_call_graph(tree: ast.AST) -> dict[str, list[str]]:
     Returns:
         A mapping of function name to list of callee names.
     """
+    logger.debug("Building call graph", extra={"event": "analysis.callgraph.start"})
     builder = _CallGraphBuilder()
     builder.visit(tree)
+    logger.info(
+        "Call graph build completed",
+        extra={"event": "analysis.callgraph.completed", "functions": len(builder.results)},
+    )
     return builder.results

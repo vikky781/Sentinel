@@ -1,6 +1,8 @@
 """Analysis engine orchestration for Sentinel."""
 
+import logging
 from pathlib import Path
+from typing import Any
 
 from sentinel.analysis.callgraph import build_call_graph
 from sentinel.analysis.complexity import compute_cyclomatic_complexity
@@ -15,8 +17,10 @@ from sentinel.parser.ast_extractor import (
 )
 from sentinel.scoring.maintainability import calculate_score
 
+logger = logging.getLogger(__name__)
 
-def analyze_file(path: Path) -> dict:
+
+def analyze_file(path: Path) -> dict[str, Any]:
     """Parse a Python file, compute all metrics, and return an aggregated report.
 
     Steps performed in order:
@@ -52,6 +56,7 @@ def analyze_file(path: Path) -> dict:
         sentinel.parser.ast_extractor.SentinelSyntaxError: On invalid syntax.
         OSError: If the file cannot be read.
     """
+    logger.info("Analysis pipeline started", extra={"event": "analysis.engine.start", "path": str(path)})
     tree = parse_python_file(path)
 
     functions = extract_functions(tree)
@@ -68,6 +73,18 @@ def analyze_file(path: Path) -> dict:
         complexities=complexity,
         nesting=nesting,
         globals_count=len(globals_list),
+    )
+
+    logger.info(
+        "Analysis pipeline completed",
+        extra={
+            "event": "analysis.engine.completed",
+            "path": str(path),
+            "functions": len(functions),
+            "classes": len(classes),
+            "imports": len(imports),
+            "globals": len(globals_list),
+        },
     )
 
     return {
